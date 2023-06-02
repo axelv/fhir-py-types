@@ -30,7 +30,6 @@ def main() -> None:
     argparser.add_argument(
         "--base-model",
         default="pydantic.BaseModel",
-        required=True,
         help="Python path to the Base Model class to use as the base class for generated models",
     )
     
