@@ -6,13 +6,14 @@ import logging
 
 from dataclasses import replace
 from enum import Enum, auto
-from typing import Iterable, List, Literal, Tuple, cast
+from typing import Iterable, List, Literal, Tuple, cast 
 
 from fhir_py_types import (
     StructureDefinition,
     StructureDefinitionKind,
     StructurePropertyType,
     is_polymorphic,
+    is_profile
 )
 
 
@@ -238,18 +239,6 @@ def define_tagged_union(
         ),
     )
 
-
-def select_tagged_resources(
-    definitions: Iterable[StructureDefinition], key: str
-) -> Iterable[StructureDefinition]:
-    return (
-        definition
-        for definition in definitions
-        if definition.kind == StructureDefinitionKind.RESOURCE
-        and key in definition.elements
-    )
-
-
 def select_nested_definitions(
     definition: StructureDefinition,
 ) -> Iterable[StructureDefinition]:
@@ -258,7 +247,6 @@ def select_nested_definitions(
         for d in definition.elements.values()
         if d.kind == StructureDefinitionKind.COMPLEX
     )
-
 
 def iterate_definitions_tree(
     root: StructureDefinition,
@@ -271,7 +259,6 @@ def iterate_definitions_tree(
         subtree.extend(select_nested_definitions(tree_node))
 
     yield root
-
 
 def build_ast(
     structure_definitions: Iterable[StructureDefinition],
@@ -295,7 +282,7 @@ def build_ast(
                         )
                     )
 
-    resources = list(select_tagged_resources(structure_definitions, key="resourceType"))
+    resources = [sd for sd in structure_definitions if not is_profile(sd) and sd.kind == StructureDefinitionKind.RESOURCE]
     if resources:
         typedefinitions.append(
             define_tagged_union(
