@@ -1,4 +1,5 @@
 import json
+import re
 import logging
 import os
 
@@ -15,7 +16,7 @@ FHIR_TO_SYSTEM_TYPE_MAP = {
     "System.Boolean": "bool",
     "System.Time": "time",
     "System.Date": "date",
-    "System.DateTime": "datetime",
+    "System.DateTime": "datetime | date",
     "System.Decimal": "int",
     "System.Integer": "int",
 }
@@ -38,11 +39,13 @@ def parse_target_profile(target_profile: List[str]) -> List[str]:
     return [profile for _, profile in profiles]
 
 
-def parse_resource_name(path: str) -> str:
+def parse_resource_name(path: str, base:str|None = None) -> str:
     uppercamelcase = lambda s: s[:1].upper() + s[1:]
 
-    return "".join(uppercamelcase(p) for p in path.removeprefix("#").split("."))
-
+    path_tuple = tuple(uppercamelcase(p) for p in re.split(r"[^a-zA-Z0-9]", path))
+    if base is not None:
+        path_tuple = (base,) + path_tuple[1:]
+    return "".join(path_tuple)
 
 def unwrap_schema_type(
     schema: dict, kind: Optional[StructureDefinitionKind]
@@ -52,7 +55,7 @@ def unwrap_schema_type(
             return [(parse_resource_name(schema["base"]["path"]), [])]
         case _:
             if "contentReference" in schema:
-                return [(parse_resource_name(schema["contentReference"]), [])]
+                return [(parse_resource_name(schema["contentReference"].split("#")[-1]), [])]
             else:
                 return ((t["code"], t.get("targetProfile", [])) for t in schema["type"])
 
@@ -103,12 +106,14 @@ def parse_base_structure_definition(definition: dict[str, Any]) -> StructureDefi
             default_elements = {
                 "resourceType": StructureDefinition(
                     id=definition["type"],
+                    kind=kind,
                     docstring=base_schema["short"],
                     type=[
                         StructurePropertyType(
                             code=definition["type"], required=True, literal=True
                         )
                     ],
+                    derivation=definition["derivation"] if "derivation" in definition else None,
                     elements={},
                 )
             }
@@ -116,18 +121,30 @@ def parse_base_structure_definition(definition: dict[str, Any]) -> StructureDefi
             default_elements = {}
 
     return StructureDefinition(
-        id=definition["id"],
+        id=definition["name"],
         kind=kind,
         docstring=base_schema["definition"],
         type=parse_property_type(structure_schema, kind),
+        derivation=definition["derivation"] if "derivation" in definition else None,
         elements=default_elements,
     )
+
+def iterate_element_definitions(definition:dict[str, Any]):
+    schemas = definition["snapshot"]["element"]
+    for schema in schemas:
+        if schema["id"] == definition["type"]:
+            # Skip the base schema
+            continue
+        if "sliceName" in schema:
+            # Skip slices
+            continue
+        yield schema
 
 
 def parse_structure_definition(definition: dict[str, Any]) -> StructureDefinition:
     structure_definition = parse_base_structure_definition(definition)
     schemas = (
-        e for e in definition["snapshot"]["element"] if e["id"] != definition["type"]
+        e for e in iterate_element_definitions(definition)
     )
 
     for schema in sorted(schemas, key=lambda s: len(s["path"])):
@@ -139,7 +156,7 @@ def parse_structure_definition(definition: dict[str, Any]) -> StructureDefinitio
         property_kind = parse_property_kind(schema)
 
         subtree.elements[property_key] = StructureDefinition(
-            id=parse_resource_name(schema["id"]),
+            id=parse_resource_name(schema["id"], definition["name"]),
             docstring=schema["definition"],
             type=parse_property_type(schema, property_kind),
             kind=property_kind,
