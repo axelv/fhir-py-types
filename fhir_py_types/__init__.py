@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 
 class StructureDefinitionKind(Enum):
@@ -25,6 +25,20 @@ class StructureDefinitionKind(Enum):
                 return StructureDefinitionKind.RESOURCE
             case _:
                 raise ValueError(f"Unknown StructureDefinition kind: {kind}")
+class StructureDefinitionDerivation(Enum):
+    CONSTRAINT = "constraint"
+    SPECIALIZATION = "specialization"
+
+    @staticmethod
+    def from_str(derivation: str):
+        match derivation:
+            case "constraint":
+                return StructureDefinitionDerivation.CONSTRAINT
+            case "specialization":
+                return StructureDefinitionDerivation.SPECIALIZATION
+            case _:
+                raise ValueError(f"Unknown StructureDefinition derivation: {derivation}")
+
 
 
 @dataclass(frozen=True)
@@ -42,8 +56,14 @@ class StructureDefinition:
     docstring: str
     type: List[StructurePropertyType]
     elements: dict[str, "StructureDefinition"]
+    choice_type: bool = False
+    derivation: StructureDefinitionDerivation | None = None
+    abstract: bool = False
     kind: Optional[StructureDefinitionKind] = None
 
-
 def is_polymorphic(definition: StructureDefinition):
-    return len(definition.type) > 1
+    return definition.choice_type 
+
+def is_resource_profile(definition: StructureDefinition):
+    return definition.derivation == StructureDefinitionDerivation.CONSTRAINT and definition.kind == StructureDefinitionKind.RESOURCE
+
