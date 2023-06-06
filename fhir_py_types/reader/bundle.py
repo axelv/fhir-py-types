@@ -7,6 +7,7 @@ from typing import Any, Iterable, List, Optional, Tuple
 from fhir_py_types import (
     StructureDefinition,
     StructureDefinitionKind,
+    StructureDefinitionDerivation,
     StructurePropertyType,
 )
 
@@ -109,6 +110,8 @@ def parse_base_structure_definition(definition: dict[str, Any]) -> StructureDefi
                             code=definition["type"], required=True, literal=True
                         )
                     ],
+                    derivation=StructureDefinitionDerivation.from_str(definition["derivation"]) if "derivation" in definition else None,
+                    abstract=definition["abstract"] if "abstract" in definition else False,
                     elements={},
                 )
             }
@@ -120,6 +123,8 @@ def parse_base_structure_definition(definition: dict[str, Any]) -> StructureDefi
         kind=kind,
         docstring=base_schema["definition"],
         type=parse_property_type(structure_schema, kind),
+        derivation=definition["derivation"] if "derivation" in definition else None,
+        abstract=definition["abstract"] if "abstract" in definition else False,
         elements=default_elements,
     )
 
@@ -142,6 +147,7 @@ def parse_structure_definition(definition: dict[str, Any]) -> StructureDefinitio
             id=parse_resource_name(schema["id"]),
             docstring=schema["definition"],
             type=parse_property_type(schema, property_kind),
+            choice_type=schema["path"].endswith("[x]"), # more info: https://build.fhir.org/elementdefinition.html#path,
             kind=property_kind,
             elements={},
         )
