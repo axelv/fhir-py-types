@@ -13,6 +13,7 @@ from fhir_py_types import (
     StructureDefinitionKind,
     StructurePropertyType,
     is_polymorphic,
+    is_resource_profile,
 )
 
 
@@ -295,7 +296,7 @@ def build_ast(
                         )
                     )
 
-    resources = list(select_tagged_resources(structure_definitions, key="resourceType"))
+    resources = [sd for sd in structure_definitions if not is_resource_profile(sd) and sd.kind == StructureDefinitionKind.RESOURCE and not sd.abstract]
     if resources:
         typedefinitions.append(
             define_tagged_union(
