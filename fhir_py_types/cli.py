@@ -42,7 +42,7 @@ def main() -> None:
         resource_file.writelines(
             [
                 "from typing import List as List_, Optional as Optional_, Literal as Literal_, Annotated as Annotated_, NewType as NewType_\n",
-                "from datetime import time, date, datetime\n",
+                "from datetime import time as time_, date as date_, datetime as datetime_\n",
                 "from %s import %s as BaseModel\n" % tuple(args.base_model.rsplit(".", 1)),
                 "from pydantic import Field, Extra\n",
                 "\n\n",
