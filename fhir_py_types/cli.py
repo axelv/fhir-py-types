@@ -41,7 +41,7 @@ def main() -> None:
     with open(os.path.abspath(args.outfile), "w") as resource_file:
         resource_file.writelines(
             [
-                "from typing import List as List_, Optional as Optional_, Literal as Literal_, Annotated as Annotated_\n",
+                "from typing import List as List_, Optional as Optional_, Literal as Literal_, Annotated as Annotated_, NewType as NewType_\n",
                 "from datetime import time, date, datetime\n",
                 "from %s import %s as BaseModel\n" % tuple(args.base_model.rsplit(".", 1)),
                 "from pydantic import Field, Extra\n",

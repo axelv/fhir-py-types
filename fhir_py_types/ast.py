@@ -127,7 +127,7 @@ def make_assignment_statement(
                 target=ast.Name(target), annotation=annotation, simple=1, value=default
             )
         case AnnotationForm.TypeAlias:
-            return ast.Assign(targets=[ast.Name(target)], value=annotation)
+            return ast.Assign(targets=[ast.Name(target)], value=ast.Call(ast.Name("NewType_"), args=[ast.Constant(target), annotation], keywords=[]))
 
 
 def type_annotate(
