@@ -16,7 +16,7 @@ FHIR_TO_SYSTEM_TYPE_MAP = {
     "System.Boolean": "bool",
     "System.Time": "time_",
     "System.Date": "date_",
-    "System.DateTime": "datetime_ | date_",
+    "System.DateTime": "datetime_",
     "System.Decimal": "int",
     "System.Integer": "int",
 }
