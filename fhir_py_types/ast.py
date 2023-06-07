@@ -6,7 +6,7 @@ import logging
 
 from dataclasses import replace
 from enum import Enum, auto
-from typing import Iterable, List, Literal, Tuple, cast
+from typing import Iterable, List, Literal, Tuple, cast, Generator
 
 from fhir_py_types import (
     StructureDefinition,
@@ -24,7 +24,6 @@ class AnnotationForm(Enum):
     Property = auto()
     TypeAlias = auto()
     Dict = auto()
-
 
 def make_type_annotation(
     type_: StructurePropertyType, form: AnnotationForm
@@ -131,22 +130,31 @@ def make_assignment_statement(
 
 
 def type_annotate(
-    defintion: StructureDefinition,
+    definition: StructureDefinition,
     identifier: str,
     form: Literal[AnnotationForm.Property, AnnotationForm.TypeAlias],
-) -> Iterable[ast.stmt]:
-    return itertools.chain.from_iterable(
-        [
-            make_assignment_statement(
+) -> Generator[ast.stmt, None, None]:
+    for (identifier_, type_) in zip_identifier_type(definition, identifier): 
+        # type definition of the field
+        yield make_assignment_statement(
                 identifier_ + "_" if keyword.iskeyword(identifier_) else identifier_,
                 make_type_annotation(type_, form),
                 form,
                 default=make_default_initializer(identifier_, type_),
-            ),
-            ast.Expr(value=ast.Str(defintion.docstring)),
-        ]
-        for (identifier_, type_) in zip_identifier_type(defintion, identifier)
-    )
+            )
+        # docstring
+        yield ast.Expr(value=ast.Str(definition.docstring))
+
+        # in case of primitive type, add a _{field_name} field for `extensions` and `id`` on primitive types
+        # more info: https://build.fhir.org/datatypes.html#representations 
+        if definition.kind == StructureDefinitionKind.PRIMITIVE:
+            yield make_assignment_statement(
+                    "_"+identifier_,
+                    # This is assumes Element has already been defined which might not be true
+                    make_type_annotation(StructurePropertyType("Element"), form),
+                    form,
+                    default=make_default_initializer(identifier_, type_)
+                )
 
 
 def order_type_overriding_properties(
