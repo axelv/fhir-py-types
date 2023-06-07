@@ -8,6 +8,7 @@ from typing import Any, Iterable, List, Optional, Tuple
 from fhir_py_types import (
     StructureDefinition,
     StructureDefinitionKind,
+    StructureDefinitionDerivation,
     StructurePropertyType,
 )
 
@@ -27,9 +28,9 @@ logger = logging.getLogger(__name__)
 DefinitionsBundle = dict[str, Any]
 
 
-def parse_type_identifier(type_: str) -> str:
+def parse_type_identifier(type_: str, system_type_map:dict[str,str]) -> str:
     code = type_.split("/")[-1]
-    return FHIR_TO_SYSTEM_TYPE_MAP.get(code, code)
+    return system_type_map.get(code, code)
 
 
 def parse_target_profile(target_profile: List[str]) -> List[str]:
@@ -51,21 +52,23 @@ def unwrap_schema_type(
     schema: dict, kind: Optional[StructureDefinitionKind]
 ) -> Iterable[Tuple[str, List[str]]]:
     match kind:
-        case StructureDefinitionKind.COMPLEX | StructureDefinitionKind.RESOURCE:
+        case StructureDefinitionKind.COMPLEX:
             return [(parse_resource_name(schema["base"]["path"]), [])]
         case _:
             if "contentReference" in schema:
                 return [(parse_resource_name(schema["contentReference"].split("#")[-1]), [])]
             else:
-                return ((t["code"], t.get("targetProfile", [])) for t in schema["type"])
+                return ((t["code"], t.get("targetProfile", [])) for t in  schema.get("type", []))
 
 
 def parse_property_type(
-    schema: dict, kind: Optional[StructureDefinitionKind]
+    schema: dict, 
+    kind: Optional[StructureDefinitionKind],
+    system_type_map: dict[str, str]
 ) -> List[StructurePropertyType]:
     return [
         StructurePropertyType(
-            code=parse_type_identifier(type_),
+            code=parse_type_identifier(type_, system_type_map),
             target_profile=parse_target_profile(target_profile),
             required=schema["min"] != 0,
             isarray=schema["max"] != "1",
@@ -84,11 +87,13 @@ def parse_property_kind(schema: dict):
     match schema.get("type"):
         case [{"code": "BackboneElement"}] | [{"code": "Element"}]:
             return StructureDefinitionKind.COMPLEX
-        case _:
+        case [{"code": "Resource"}|{"code": "DomainResource"}]:
+            return StructureDefinitionKind.RESOURCE
+        case _: 
             return None
 
 
-def parse_base_structure_definition(definition: dict[str, Any]) -> StructureDefinition:
+def parse_base_structure_definition(definition: dict[str, Any], system_type_map:dict[str, str]) -> StructureDefinition:
     kind = StructureDefinitionKind.from_str(definition["kind"])
     schemas = definition["snapshot"]["element"]
     base_schema = next(s for s in schemas if s["id"] == definition["type"])
@@ -113,7 +118,8 @@ def parse_base_structure_definition(definition: dict[str, Any]) -> StructureDefi
                             code=definition["type"], required=True, literal=True
                         )
                     ],
-                    derivation=definition["derivation"] if "derivation" in definition else None,
+                    derivation=StructureDefinitionDerivation.from_str(definition["derivation"]) if "derivation" in definition else None,
+                    abstract=definition["abstract"] if "abstract" in definition else False,
                     elements={},
                 )
             }
@@ -124,8 +130,9 @@ def parse_base_structure_definition(definition: dict[str, Any]) -> StructureDefi
         id=definition["name"],
         kind=kind,
         docstring=base_schema["definition"],
-        type=parse_property_type(structure_schema, kind),
+        type=parse_property_type(structure_schema, kind, system_type_map),
         derivation=definition["derivation"] if "derivation" in definition else None,
+        abstract=definition["abstract"] if "abstract" in definition else False,
         elements=default_elements,
     )
 
@@ -141,13 +148,14 @@ def iterate_element_definitions(definition:dict[str, Any]):
         yield schema
 
 
-def parse_structure_definition(definition: dict[str, Any]) -> StructureDefinition:
-    structure_definition = parse_base_structure_definition(definition)
+def parse_structure_definition(definition: dict[str, Any], system_type_map:dict[str, str]) -> StructureDefinition:
+    structure_definition = parse_base_structure_definition(definition, system_type_map)
     schemas = (
         e for e in iterate_element_definitions(definition)
     )
 
     for schema in sorted(schemas, key=lambda s: len(s["path"])):
+
         subtree = structure_definition
         for path_component in schema["path"].split(".")[1:-1]:
             subtree = subtree.elements[path_component]
@@ -158,7 +166,9 @@ def parse_structure_definition(definition: dict[str, Any]) -> StructureDefinitio
         subtree.elements[property_key] = StructureDefinition(
             id=parse_resource_name(schema["id"], definition["name"]),
             docstring=schema["definition"],
-            type=parse_property_type(schema, property_kind),
+            type=parse_property_type(schema, property_kind, system_type_map),
+            # Choice types or open types as defined here: https://build.fhir.org/elementdefinition.html#path
+            choice_type=schema["path"].endswith("[x]"), 
             kind=property_kind,
             elements={},
         )
@@ -176,12 +186,13 @@ def select_structure_definition_resources(bundle: DefinitionsBundle):
 
 def read_structure_definitions(
     bundle: DefinitionsBundle,
+    system_type_map: dict[str, str],
 ) -> Iterable[StructureDefinition]:
     raw_definitions = select_structure_definition_resources(bundle)
 
-    return (parse_structure_definition(definition) for definition in raw_definitions)
+    return (parse_structure_definition(definition, system_type_map) for definition in raw_definitions)
 
-
-def load_from_bundle(path: str) -> Iterable[StructureDefinition]:
+def load_from_bundle(path: str, system_type_map:dict[str, str]) -> Iterable[StructureDefinition]:
     with open(os.path.abspath(path), encoding="utf8") as schema_file:
-        return read_structure_definitions(json.load(schema_file))
+        return read_structure_definitions(json.load(schema_file), system_type_map)
+
