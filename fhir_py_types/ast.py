@@ -147,7 +147,7 @@ def type_annotate(
 
         # in case of primitive type, add a _{field_name} field for `extensions` and `id`` on primitive types
         # more info: https://build.fhir.org/datatypes.html#representations 
-        if definition.kind == StructureDefinitionKind.PRIMITIVE:
+        if definition.kind == StructureDefinitionKind.PRIMITIVE and form == AnnotationForm.Property:
             yield make_assignment_statement(
                     "_"+identifier_,
                     # This is assumes Element has already been defined which might not be true

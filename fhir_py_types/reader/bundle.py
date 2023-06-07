@@ -14,9 +14,9 @@ from fhir_py_types import (
 FHIR_TO_SYSTEM_TYPE_MAP = {
     "System.String": "str",
     "System.Boolean": "bool",
-    "System.Time": "time_",
-    "System.Date": "date_",
-    "System.DateTime": "datetime_",
+    "System.Time": "str",
+    "System.Date": "str",
+    "System.DateTime": "str",
     "System.Decimal": "int",
     "System.Integer": "int",
 }
@@ -49,13 +49,14 @@ def unwrap_schema_type(
     schema: dict, kind: Optional[StructureDefinitionKind]
 ) -> Iterable[Tuple[str, List[str]]]:
     match kind:
-        case StructureDefinitionKind.COMPLEX | StructureDefinitionKind.RESOURCE:
+        case StructureDefinitionKind.COMPLEX:
             return [(parse_resource_name(schema["base"]["path"]), [])]
         case _:
             if "contentReference" in schema:
                 return [(parse_resource_name(schema["contentReference"]), [])]
             else:
-                return ((t["code"], t.get("targetProfile", [])) for t in schema["type"])
+                types = schema["type"] if "type" in schema else []
+                return ((t["code"], t.get("targetProfile", [])) for t in types)
 
 
 def parse_property_type(
@@ -82,8 +83,10 @@ def parse_property_kind(schema: dict):
     match schema.get("type"):
         case [{"code": "BackboneElement"}] | [{"code": "Element"}]:
             return StructureDefinitionKind.COMPLEX
+        case [{"code": "Resource"}|{"code": "DomainResource"}]:
+            return StructureDefinitionKind.RESOURCE
         case _:
-            return None
+            return StructureDefinitionKind.PRIMITIVE
 
 
 def parse_base_structure_definition(definition: dict[str, Any]) -> StructureDefinition:
@@ -136,6 +139,7 @@ def parse_structure_definition(definition: dict[str, Any]) -> StructureDefinitio
     )
 
     for schema in sorted(schemas, key=lambda s: len(s["path"])):
+
         subtree = structure_definition
         for path_component in schema["path"].split(".")[1:-1]:
             subtree = subtree.elements[path_component]
@@ -147,7 +151,8 @@ def parse_structure_definition(definition: dict[str, Any]) -> StructureDefinitio
             id=parse_resource_name(schema["id"]),
             docstring=schema["definition"],
             type=parse_property_type(schema, property_kind),
-            choice_type=schema["path"].endswith("[x]"), # more info: https://build.fhir.org/elementdefinition.html#path,
+            # Choice types or open types as defined here: https://build.fhir.org/elementdefinition.html#path
+            choice_type=schema["path"].endswith("[x]"), 
             kind=property_kind,
             elements={},
         )
