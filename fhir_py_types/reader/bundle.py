@@ -45,8 +45,7 @@ def unwrap_schema_type(
             if "contentReference" in schema:
                 return [(parse_resource_name(schema["contentReference"]), [])]
             else:
-                types = schema["type"] if "type" in schema else []
-                return ((t["code"], t.get("targetProfile", [])) for t in types)
+                return ((t["code"], t.get("targetProfile", [])) for t in  schema.get("type", []))
 
 
 def parse_property_type(
@@ -77,8 +76,8 @@ def parse_property_kind(schema: dict):
             return StructureDefinitionKind.COMPLEX
         case [{"code": "Resource"}|{"code": "DomainResource"}]:
             return StructureDefinitionKind.RESOURCE
-        case _:
-            return StructureDefinitionKind.PRIMITIVE
+        case _: 
+            return None
 
 
 def parse_base_structure_definition(definition: dict[str, Any], system_type_map:dict[str, str]) -> StructureDefinition:
@@ -168,7 +167,7 @@ def read_structure_definitions(
 
     return (parse_structure_definition(definition, system_type_map) for definition in raw_definitions)
 
-
 def load_from_bundle(path: str, system_type_map:dict[str, str]) -> Iterable[StructureDefinition]:
     with open(os.path.abspath(path), encoding="utf8") as schema_file:
         return read_structure_definitions(json.load(schema_file), system_type_map)
+

@@ -177,7 +177,7 @@ def define_class_object(
             base_class_kwargs: Iterable[ast.keyword] = [
                 ast.keyword(
                     arg="extra",
-                    value=ast.Attribute(value=ast.Name("Extra"), attr="forbid"),
+                    value=ast.Attribute(value=ast.Name("Extra"), attr="ignore"),
                 ),
                 ast.keyword(arg="validate_assignment", value=ast.Constant(True)),
             ]
